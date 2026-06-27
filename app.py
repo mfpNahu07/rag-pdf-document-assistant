@@ -60,15 +60,17 @@ if "rag_messages" not in st.session_state:
         {"role": "assistant", "content": "Hello! I have fully processed your documents. Ask me anything about them!"}
     ]
 
-# Display past UI chat messages
+# Display past UI chat messages with custom avatars
 for msg in st.session_state.rag_messages:
-    with st.chat_message(msg["role"]):
+    # 🧠 FIX: Added custom avatars based on the role
+    custom_avatar = "🧠" if msg["role"] == "assistant" else "👤"
+    with st.chat_message(msg["role"], avatar=custom_avatar):
         st.write(msg["content"])
 
 # Capture user input
 if user_input := st.chat_input("Ask a question about your PDF..."):
-    # Display user input on the fly
-    with st.chat_message("user"):
+    # Display user input on the fly with user avatar
+    with st.chat_message("user", avatar="👤"):
         st.write(user_input)
     st.session_state.rag_messages.append({"role": "user", "content": user_input})
     
@@ -76,7 +78,7 @@ if user_input := st.chat_input("Ask a question about your PDF..."):
     with st.spinner("Analyzing documents..."):
         ai_response = rag_chain.invoke(user_input)
     
-    # Render clean AI response
-    with st.chat_message("assistant"):
+    # Render clean AI response with bot avatar
+    with st.chat_message("assistant", avatar="🧠"):
         st.write(ai_response)
     st.session_state.rag_messages.append({"role": "assistant", "content": ai_response})
