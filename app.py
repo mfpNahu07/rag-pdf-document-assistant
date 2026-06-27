@@ -4,7 +4,7 @@ from dotenv import load_dotenv
 from langchain_google_genai import ChatGoogleGenerativeAI, GoogleGenerativeAIEmbeddings
 from langchain_chroma import Chroma
 from langchain_core.prompts import ChatPromptTemplate
-from langchain_core.runnables import RunnablePassthrough
+from langchain_core.runnables import RunnablePassthrough, RunnableParallel
 from langchain_core.output_parsers import StrOutputParser
 
 # Load environment variables (API Key)
@@ -65,39 +65,57 @@ prompt = ChatPromptTemplate.from_template(system_prompt)
 def format_docs(docs):
     return "\n\n".join(doc.page_content for doc in docs)
 
-# 🚀 MODERN LCEL ORCHESTRATION CHAIN (Replacing create_retrieval_chain)
-rag_chain = (
-    {"context": retriever | format_docs, "question": RunnablePassthrough()}
-    | prompt
-    | llm
-    | StrOutputParser()
-)
+# 🚀 FIX: Wrap the dictionary in a RunnableParallel so it supports the .invoke() method
+context_retriever = RunnableParallel({
+    "context": retriever | format_docs, 
+    "question": RunnablePassthrough()
+})
+
+generation_chain = prompt | llm | StrOutputParser()
 
 # Initialize simple chat logs interface if not present
 if "rag_messages" not in st.session_state:
     st.session_state.rag_messages = [
-        {"role": "assistant", "content": "Hello! I have fully processed your documents. Ask me anything about them!"}
+        {"role": "assistant", "content": "Hello! I have fully processed your documents. Ask me anything about them!", "sources": []}
     ]
 
-# Display past UI chat messages with custom avatars
+# Display past UI chat messages with custom avatars and stored sources
 for msg in st.session_state.rag_messages:
-    # 🧠 FIX: Added custom avatars based on the role
     custom_avatar = "🧠" if msg["role"] == "assistant" else "👤"
     with st.chat_message(msg["role"], avatar=custom_avatar):
         st.write(msg["content"])
+        if msg["role"] == "assistant" and msg.get("sources"):
+            with st.expander("📄 View Source Context"):
+                for idx, src in enumerate(msg["sources"]):
+                    st.markdown(f"**Chunk {idx+1}:**\n{src}")
 
 # Capture user input
 if user_input := st.chat_input("Ask a question about your PDF..."):
-    # Display user input on the fly with user avatar
+    # Display user input on the fly
     with st.chat_message("user", avatar="👤"):
         st.write(user_input)
-    st.session_state.rag_messages.append({"role": "user", "content": user_input})
+    st.session_state.rag_messages.append({"role": "user", "content": user_input, "sources": []})
     
     # Process queries using the automated LCEL RAG pipeline
     with st.spinner("Analyzing documents..."):
-        ai_response = rag_chain.invoke(user_input)
+        # Resolve the dynamic dictionary variables using the fixed runnable setup
+        retrieved_context = context_retriever.invoke(user_input)
+        ai_response = generation_chain.invoke(retrieved_context)
+        
+        # Extract raw source documents text from the retriever backend for the UI
+        raw_docs = retriever.invoke(user_input)
+        source_texts = [doc.page_content for doc in raw_docs]
     
     # Render clean AI response with bot avatar
     with st.chat_message("assistant", avatar="🧠"):
         st.write(ai_response)
-    st.session_state.rag_messages.append({"role": "assistant", "content": ai_response})
+        if source_texts:
+            with st.expander("📄 View Source Context"):
+                for idx, src in enumerate(source_texts):
+                    st.markdown(f"**Chunk {idx+1}:**\n{src}")
+                    
+    st.session_state.rag_messages.append({
+        "role": "assistant", 
+        "content": ai_response,
+        "sources": source_texts
+    })
