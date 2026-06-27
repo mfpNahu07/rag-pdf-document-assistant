@@ -10,6 +10,25 @@ from langchain_core.output_parsers import StrOutputParser
 # Load environment variables (API Key)
 load_dotenv()
 
+# --- SIDEBAR CONFIGURATION ---
+with st.sidebar:
+    st.header("📂 Document Repository")
+    st.caption("Current files stored in the 'docs/' directory:")
+    
+    # Read the files inside the docs directory safely
+    if os.path.exists("docs"):
+        files = [f for f in os.listdir("docs") if f.endswith(".pdf")]
+        if files:
+            for file in files:
+                st.write(f"📄 **{file}**")
+        else:
+            st.warning("⚠️ No PDF files found in 'docs/'")
+    else:
+        st.error("📁 'docs/' folder not found")
+        
+    st.divider()
+    st.caption("To index new documents, add them to the folder and run `python ingest.py` in your terminal.")
+
 st.title("📚 RAG PDF Document Assistant")
 st.caption("Ask questions about your uploaded documents using LangChain and Gemini 3.5 Flash")
 
